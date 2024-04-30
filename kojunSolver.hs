@@ -4,7 +4,8 @@ import Types
 import MatrixHelper
 import Data.List
 
--- modulo do solver do Kojun
+-- modulo do solver do Kojun --
+
 
 -- conta quantos elementos estão em um grupo
 groupSize :: Eq m => m -> Matrix m -> Int
@@ -21,6 +22,7 @@ getValuesInGroup values groups id = map fst $ filter ((==id) . snd) valuesTuple
         valuesTuple = foldl1 (++) (zipWith zip values groups)
 
 
+-- subtrai a lista de escolhas `ys` de `xs`, mas mantém `xs` inalterado se tiver apenas um elemento.
 minus :: Choices -> Choices -> Choices
 xs `minus` ys = if singleElementInList xs then xs else xs \\ ys
 
@@ -31,9 +33,8 @@ singleElementInList [_] = True
 singleElementInList _ = False
 
 
--- cria escolhas possíveis em cada célula
--- células sem valor possuem valores possíveis de 1 até tamanho do grupo
--- remove os valores que já estão naquele grupo (para não haver repetição)
+-- Gera uma matriz de escolhas possíveis para cada célula no tabuleiro.
+-- Para células vazias (valor 0), as escolhas são todos os números de 1 até o tamanho do grupo, excluindo números que já estão presentes no grupo.
 choices :: Table -> Table -> Matrix Choices
 choices values groups = map (map choice) (zipWith zip values groups)
     where choice (v, p) = if v == 0 then [1..(groupSize p groups)] `minus` (getValuesInGroup values groups p) else [v]
@@ -44,8 +45,9 @@ groupsByColumn :: Eq m => Matrix m -> Table -> [Row m]
 groupsByColumn values groups = zipWith zip (cols values) (cols groups) >>= map (map fst) . groupBy (\x y -> snd x == snd y)
 
 
--- em cada coluna (já dividida por grupos), faz uma redução em lista
--- faz a redução das escolhas dentro de cada lista e retorna a matriz reduzida
+-- Reduz as escolhas disponíveis em cada célula com base nas escolhas nas colunas e grupos correspondentes.
+-- Aplica uma redução coluna por coluna, ajustando as escolhas disponíveis para evitar conflitos.
+-- A ideia é simplificar o espaço de busca antes do backtracking.
 reduceChoices :: Matrix Choices -> Table -> Matrix Choices
 reduceChoices values groups = cols $ originalCols (map reduceChoicesByList (groupsByColumn values groups)) (size values)
 
@@ -56,23 +58,27 @@ reduceChoicesByList xss = [xs `minus` singles | xs <- xss]
     where singles = concat (filter singleElementInList xss)
 
 
--- filtra soluções baseada nas escolhas, percorrendo as células
--- cria uma lista com tabuleiros com possíveis soluções para o tabuleiro
+-- Função principal de backtracking que busca por soluções válidas.
+-- Avalia se o estado atual das escolhas é viável; se não for, retorna uma lista vazia.
+-- Se todas as células têm uma única escolha, uma solução completa foi encontrada.
+-- Se ainda existem múltiplas escolhas, a função continua a busca recursivamente com novas configurações geradas por `expandChoices`.
 searchForSolution :: Matrix Choices -> Table -> [Table]
 searchForSolution values groups
     | notPossible values groups = []  -- caso não tenha solução, retorna lista vazia
     | all (all singleElementInList) values = [map concat values]  -- não precisa de mais reduções
-    | otherwise = [g | values' <- expandChoices values, g <- searchForSolution (reduceChoices values' groups) groups]  -- ainda precisa de redução, expandindo a matriz e em seguida reduzindo, continuando a busca
+    | otherwise = [g | values' <- expandChoices values, g <- searchForSolution (reduceChoices values' groups) groups]  -- ainda precisa de redução.
 
 
--- ve se tabuleiro não gera solução
+-- verifica se tabuleiro não gera uma solução
 notPossible :: Matrix Choices -> Table -> Bool
 notPossible values groups = empty values || not (valid values groups)
     where
         empty m = any (any null) m
 
 
--- verifica se uma matriz de escolhas é valida
+-- Verifica se uma matriz de escolhas é válida com base em várias regras.
+-- Validações incluem a verificação de vizinhos (nenhum par adjacente pode ter o mesmo valor),
+-- valores dentro de um grupo (não devem repetir), e ordenamento nas colunas dentro de um grupo (devem ser descrescentes).
 valid :: Matrix Choices -> Table -> Bool
 valid values groups = all validNeighbour (cols values) &&
                       all validNeighbour (rows values) &&  -- nenhuma célula tem vizinhos com valor igual (em linha e coluna)
@@ -104,7 +110,9 @@ descendingRow (a:b:bs)
     | otherwise = descendingRow (b:bs)
 
 
--- faz expanção das escolhas
+-- Expande as escolhas de uma célula que possui várias possibilidades, gerando várias matrizes de escolhas.
+-- Cada matriz gerada é uma cópia da original, exceto por uma célula, que tem uma das possíveis escolhas fixadas.
+-- Esta função é necessária para o backtracking, permitindo explorar diferentes caminhos para a solução.
 expandChoices :: Matrix Choices -> [Matrix Choices]
 expandChoices m = [rows1 ++ [row1 ++ [c] : row2] ++ rows2 | c <- cs]
     where
