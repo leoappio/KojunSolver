@@ -76,7 +76,7 @@ notPossible values groups = empty values || not (valid values groups)
         empty m = any (any null) m
 
 
--- Verifica se uma matriz de escolhas é válida com base em várias regras.
+-- Verifica se uma matriz de escolhas é válida com base nas regras do jogo.
 -- Validações incluem a verificação de vizinhos (nenhum par adjacente pode ter o mesmo valor),
 -- valores dentro de um grupo (não devem repetir), e ordenamento nas colunas dentro de um grupo (devem ser descrescentes).
 valid :: Matrix Choices -> Table -> Bool
